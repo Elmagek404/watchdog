@@ -7,7 +7,7 @@ python3-based Fuzzing Tool for web application pentesters and bug hunters
 
 # installation
 ```
-git clone https://github.com/Elmagek404/watchdog/watchdog.git
+git clone https://github.com/Elmagek404/watchdog.git
 cd watchdog
 pip3 install -r requirements.txt
 chmod +x watchdog
