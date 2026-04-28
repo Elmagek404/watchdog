@@ -1,0 +1,107 @@
+#!/usr/bin/env python3
+
+import requests 
+from time import sleep 
+import argparse 
+import termcolor
+
+parser = argparse.ArgumentParser(prog="WatchDog", description="Fuzzing Tool customized for bypassing Time-based restrictions")
+parser.add_argument("-u", "--url", help="Target url", required=True)
+parser.add_argument("-w", "--wordlist", help="Path to the wordlist file", required=True)
+parser.add_argument("-d", "--delay", help="Delay between Requests. Default is 5 seconds", type=int, default=5)
+parser.add_argument("-mc", "--match-code", help="Match status code. Default 200", default="200")
+parser.add_argument("--user-agent", help="User Agent Header Value")
+parser.add_argument("-X", help="Add Custom Header example: 'apikey:AIZADQW5SA42487HA7JAQ44V...'")
+parser.add_argument("-b", "--cookie", help="Cookie Header, can be specified multiple times. Example: -b 'session=abc123' -b 'token=xyz'", action="append")
+parser.add_argument("-v", "--verbose",action="store_true")
+args = parser.parse_args()
+
+url = args.url
+delay = args.delay
+custom_header = args.X
+user_agent = args.user_agent
+wordlist = args.wordlist
+match_code = [int(c.strip()) for c in args.match_code.split(",")]
+cookies = args.cookie  # Will be a list like ['session=abc123', 'token=xyz'] or None
+verbose_mode=args.verbose
+
+def red(s): return termcolor.colored(s, "red")
+def blue(s): return termcolor.colored(s, "blue")
+def green(s): return termcolor.colored(s, "green")
+
+def parse_cookies(cookie_list):
+    """
+    Parse a list of 'key=value' cookie strings into a single Cookie header string.
+    Example: ['session=abc123', 'token=xyz'] -> 'session=abc123; token=xyz'
+    """
+    if not cookie_list:
+        return None
+    parsed = []
+    for cookie in cookie_list:
+        if "=" not in cookie:
+            print(red(f"[!] Invalid cookie format '{cookie}', expected 'key=value'. Skipping."))
+            continue
+        parsed.append(cookie.strip())
+    return "; ".join(parsed) if parsed else None
+
+def fuzz(url, wordlist, custom_header, user_agent, cookies, delay=5, match_code=None,verbose=False):
+    """
+    Main function for Fuzzing
+    """
+    try:
+        if match_code is None:
+            match_code = [200]
+
+        cookie_header = parse_cookies(cookies)
+        if cookie_header:
+            print(blue(f"[*] Using Cookies: {cookie_header}"))
+
+        with open(wordlist, "r") as fe:
+            for line in fe:
+                i = line.strip()
+                if not i:
+                    continue
+
+                if custom_header:
+                    header_key, header_value = custom_header.split(":", 1)
+                    comp_header = {header_key: header_value}
+                else:
+                    comp_header = {}
+
+                if user_agent:
+                    comp_user_agent = {"User-Agent": user_agent}
+                else:
+                    comp_user_agent = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:140.0) Gecko/20100101 Firefox/140.0"}
+
+                
+                comp_cookie = {"Cookie": cookie_header} if cookie_header else {}
+
+                
+                all_headers = {**comp_user_agent, **comp_header, **comp_cookie}
+
+                try:
+                    if not str(url).endswith("/"):
+                        url=f"{url}/"
+                    else:
+                        url=url
+                    request = requests.get(f"{url}{i}", allow_redirects=False, headers=all_headers)
+                    status_code = request.status_code
+                    if status_code in match_code:
+                        print(green(f"[+] /{i} [{status_code}]"))
+                        if verbose:
+                            formatted_headers = "\n".join(f"{k}:{v}" for k, v in all_headers.items())
+                            print(f'{request.request.method} {request.request.url}\n{formatted_headers}\n{request.request.body if request.request.body is not None else "" }')
+                    else:
+                        print(red(f"[-] /{i} [{status_code}]"))
+                        if verbose:
+                            formatted_headers = "\n".join(f"{k}:{v}" for k, v in all_headers.items())
+                            print(f'{request.request.method} {request.request.url}\n{formatted_headers}\n{request.request.body if request.request.body is not None else ""}')
+                except requests.RequestException as e:
+                    print(red(f"[!] Error requesting /{i}: {e}"))
+
+                sleep(delay)
+    except KeyboardInterrupt:
+        print(red("see you soon Hacker")) 
+        
+
+fuzz(url, wordlist, custom_header, user_agent, cookies, delay, match_code,verbose=verbose_mode)
